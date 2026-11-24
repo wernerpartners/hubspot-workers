@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --ink:#1d2330; --muted:#667085; --line:#e4e7ec; --acc:#2f54eb; --chg:#fff4e5; --chgline:#f79009; --err:#c4320a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:#f6f7f9; }
+  main { max-width:680px; margin:0 auto; padding:24px 16px 40px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 18px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:14px; }
+  .card h2 { font-size:15px; margin:0 0 12px; }
+  .field { margin-bottom:14px; }
+  .field:last-child { margin-bottom:0; }
+  label { display:block; font-weight:600; margin-bottom:5px; }
+  .help { color:var(--muted); font-size:12.5px; margin-top:4px; }
+  input, select, textarea { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; }
+  .grid .field { margin-bottom:0; }
+  .help { margin:-2px 0 5px; }
+  textarea { resize:vertical; }
+  .changed { background:var(--chg); border-color:var(--chgline); }
+  .doc { color:var(--muted); font-size:12.5px; margin:-6px 0 0; }
+  .doc a { color:var(--acc); font-weight:600; }
+  .who { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button { font:inherit; font-weight:600; border:0; border-radius:999px; padding:12px 26px; background:var(--acc); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .msg { margin-top:12px; } .err { color:var(--err); } .ok { color:#12805c; font-weight:600; }
+  @media (max-width:560px) { .who, .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Request a change</h1>
+  <p class="sub">Your request is emailed to Blanca. Nothing changes in the sheet or in HubSpot until she applies it.</p>
+
+  <div class="card"><div class="grid" id="fields"><span>Loading…</span></div></div>
+
+  <div class="card">
+    <h2>IAP document</h2>
+    <div class="doc" id="doc"></div>
+    <div class="field" style="margin-top:10px">
+      <textarea id="iap" rows="8" placeholder="Please add here any modifications to the current IAP document."></textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="who">
+      <div class="field"><label for="name">Your name (required)</label><input id="name" autocomplete="name"></div>
+      <div class="field"><label for="email">Your email (required)</label><input id="email" type="email" autocomplete="email"></div>
+    </div>
+    <div class="field"><label for="note">Additional notes</label><textarea id="note" rows="3"></textarea></div>
+    <button id="send" disabled>Send change request</button>
+    <div class="msg" id="msg"></div>
+  </div>
+</main>
+<script>
+var CAMPAIGN_ID = <?!= JSON.stringify(campaignId) ?>;
+var original = {};
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); }
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k) || ''; localStorage.setItem(k, v); } catch (e) { return ''; } }
+$('name').value = store('crName'); $('email').value = store('crEmail');
+
+function render(d) {
+  $('title').textContent = 'Request a change: ' + (d.campaignName || d.campaignId);
+  $('fields').innerHTML = d.fields.map(function (f, i) {
+    original[f.name] = f.value;
+    var input;
+    if (f.number) {
+      input = '<input id="f' + i + '" data-name="' + esc(f.name) + '" type="number" min="0" step="1" value="' + esc(f.value) + '">';
+    } else {
+      var opts = f.options.slice();
+      if (f.value && opts.indexOf(f.value) < 0) opts.unshift(f.value);
+      input = '<select id="f' + i + '" data-name="' + esc(f.name) + '">' + (f.value ? '' : '<option value="" selected>—</option>') +
+        opts.map(function (o) { return '<option' + (o === f.value ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>';
+    }
+    return '<div class="field"><label for="f' + i + '">' + esc(f.name) + '</label>' +
+      (f.help ? '<div class="help">' + esc(f.help) + '</div>' : '') + input + '</div>';
+  }).join('');
+  $('doc').innerHTML = 'IAP document: ' + (d.docLink ? '<a href="' + esc(d.docLink) + '" target="_blank" rel="noopener">current IAP document ↗</a>'
+                                                  : 'no IAP document linked yet');
+  Array.prototype.forEach.call(document.querySelectorAll('[data-name]'), function (el) {
+    var mark = function () { el.classList.toggle('changed', el.value !== (original[el.getAttribute('data-name')] || '')); };
+    el.addEventListener('change', mark); el.addEventListener('input', mark);
+  });
+  $('send').disabled = false;
+}
+
+$('send').onclick = function () {
+  if (!$('name').value.trim() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test($('email').value.trim())) {
+    $('msg').innerHTML = '<span class="err">Please type your name and a valid email.</span>'; return;
+  }
+  var values = {};
+  Array.prototype.forEach.call(document.querySelectorAll('[data-name]'), function (el) { values[el.getAttribute('data-name')] = el.value; });
+  store('crName', $('name').value.trim()); store('crEmail', $('email').value.trim());
+  $('send').disabled = true; $('msg').textContent = 'Sending…';
+  google.script.run
+    .withSuccessHandler(function () { $('msg').innerHTML = '<span class="ok">Change request sent. Thank you.</span>'; })
+    .withFailureHandler(function (e) { $('send').disabled = false; $('msg').innerHTML = '<span class="err">' + esc(e.message || e) + '</span>'; })
+    .submitChangeRequest({ campaignId: CAMPAIGN_ID, name: $('name').value, email: $('email').value,
+                           note: $('note').value, iapChanges: $('iap').value, values: values });
+};
+
+if (!CAMPAIGN_ID) $('fields').innerHTML = '<span class="err">No campaign in the link.</span>';
+else google.script.run
+  .withSuccessHandler(render)
+  .withFailureHandler(function (e) { $('fields').innerHTML = '<span class="err">' + esc(e.message || e) + '</span>'; })
+  .getChangeRow(CAMPAIGN_ID);
+</script>
+</body>
+</html>

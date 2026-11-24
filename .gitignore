@@ -1,0 +1,24 @@
+# Secrets
+.env
+.env.*
+
+# Separate repo (wernerpartners/hubspot-match-enrich-worker)
+hubspot-match-enrich-worker/
+
+# CRM data exports and run output
+*.csv
+*.log
+*_state.json
+
+# Backup copies (git history replaces these)
+*.backup*.py
+
+# Archives and office files
+*.zip
+*.xlsx
+*.docx
+
+# Python / OS
+__pycache__/
+*.pyc
+.DS_Store
